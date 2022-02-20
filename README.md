@@ -1,5 +1,5 @@
 # CLAMPSai
-The Collaboritve Lower Atmospheric Mobile Profiling System Analysis and Imagery repository has a collection of Jupyter Notebooks and python scripts used to analyze CLAMPS data gathered from the University of Oklahoma and National Severe Storms Laboratory.
+The Collaborative Lower Atmospheric Mobile Profiling System Analysis and Imagery repository has a collection of Jupyter Notebooks and python scripts used to analyze CLAMPS data gathered from the University of Oklahoma and National Severe Storms Laboratory.
 
 These scripts have been used to analyze data collected within the convective boundary layer from the VORTEX-SE field campaigns of 2016-2019. Data can be downloaded from https://www.eol.ucar.edu/field_projects/vortex-se. 
 
