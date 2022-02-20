@@ -302,14 +302,15 @@ def thetaecalc(pres,temp,dew):
     
     return np.array(mpcalc.equivalent_potential_temperature(pres,temp,dew)/units.kelvin) #K
 
-def clamps_parser(file_dir,t0,p0,height_max=3000,cape_cin=True):
+def clamps_parser(file_dir,t0,t1,p0,height_max=3000,cape_cin=True):
     '''This function will parse through CLAMPS data and return a list of dictionaries filled with variables worth looking at.
     INPUTS:
     file_dir -> str. location of where the CLAMPS data is located. This should lead to the directory where all CLAMPS
                 data is located. Within this directory, there should be sub-directories labeled by year and then another by CLAMPS.
                 The code is easy to follow to make sure the sub-directories are lined up correctly.
     t0 -> datetime object corresponding to the beginning of the observational period.
-    p0 -> datetime object corresponding to the time of passage (essentially the end of the period).
+    t1 -> datetime object corresponding to the end of the observational period.
+    p0 -> datetime object corresponding to the time of passage.
     height_max -> int. corresponding to the maximum height [meters] of the data to be returned (default is 3km).
     cape_cin -> bool. users choice whether to compute CAPE and CIN at all levels up to height_max for analysis (takes some time)
     
@@ -325,17 +326,17 @@ def clamps_parser(file_dir,t0,p0,height_max=3000,cape_cin=True):
         ####################################################################
         #Import AERI retrievals
         ####################################################################
-        aeri0 = sorted(glob(file_dir+'{}/thermo/*{}*'.format(dt.year,t0[k].strftime('%Y%m%d'))))[0]
-        aeri1 = sorted(glob(file_dir+'{}/thermo/*{}*'.format(dt.year,dt.strftime('%Y%m%d'))))[0]
+        aeri0 = sorted(glob(file_dir+'{}/thermo/aerioe/*{}*'.format(dt.year,t0[k].strftime('%Y%m%d'))))[0]
+        aeri1 = sorted(glob(file_dir+'{}/thermo/aerioe/*{}*'.format(dt.year,t1[k].strftime('%Y%m%d'))))[0]
 
         #Get the contents of each file -> lat,lon should not change
         time0,height0,lat0,lon0,pres0,temp0,dew0,qv0,theta0,thetae0,cbh0 = read_aeri(aeri0)
         time1,height1,lat1,lon1,pres1,temp1,dew1,qv1,theta1,thetae1,cbh1 = read_aeri(aeri1)
 
         if (lat0 != lat1) or (lon0!=lon1):
-            print('ERROR: Files from {} to {} are not at the same location!'.format(t0[k].strftime('%Y%m%d'),dt.strftime('%Y%m%d')))
+            print('ERROR: Files from {} to {} are not at the same location!'.format(t0[k].strftime('%Y%m%d'),t1[k].strftime('%Y%m%d')))
         elif np.sum((height0-height1)) != 0:
-            print('ERROR: Height levels from {} to {} do not match.'.format(t0[k].strftime('%Y%m%d'),dt.strftime('%Y%m%d')))
+            print('ERROR: Height levels from {} to {} do not match.'.format(t0[k].strftime('%Y%m%d'),t1[k].strftime('%Y%m%d')))
 
         #Concatenate them together
         time,lat,lon = np.concatenate((time0,time1)),lat0,lon0
@@ -346,21 +347,23 @@ def clamps_parser(file_dir,t0,p0,height_max=3000,cape_cin=True):
         #Compute the relative time scale
         rel_hours = np.array([val.total_seconds()/3600 for val in (time - dt)])
         tidx = np.where((rel_hours>=-8)&(rel_hours<=2))[0]
-
+        
         #Index the data here
         t_utc,t_rel = time[tidx],rel_hours[tidx]
         t_dec = np.array([todectime(val.hour,val.minute,val.second) for val in t_utc])
         #Make the decimal time continous
-        for i,val in enumerate(t_dec):
-            if val<10:
-                t_dec[i] = val+24
+        try:
+            iadd = np.where(t_dec<1)[0][0]
+            t_dec[iadd:] = t_dec[iadd:] + 24
+        except IndexError:
+            pass
                 
         pres,temp,dew,qv = pres[tidx,:],temp[tidx,:],dew[tidx,:],qv[tidx,:]
         theta,thetae,cbh = theta[tidx,:],thetae[tidx,:],cbh[tidx]
 
         #Replace the surface data with the MetTower data
-        sfc_file0 = sorted(glob(file_dir+'{}/surface/*{}*'.format(dt.year,t0[k].strftime('%Y%m%d'))))[0]
-        sfc_file1 = sorted(glob(file_dir+'{}/surface/*{}*'.format(dt.year,dt.strftime('%Y%m%d'))))[0]
+        sfc_file0 = sorted(glob(file_dir+'{}/surface/clamps/*{}*'.format(dt.year,t0[k].strftime('%Y%m%d'))))[0]
+        sfc_file1 = sorted(glob(file_dir+'{}/surface/clamps/*{}*'.format(dt.year,t1[k].strftime('%Y%m%d'))))[0]
 
         #Read in the surface files
         stime0,spres0,stemp0,sdew0,sqv0,stheta0,sthetae0,wspd0,wdir0 = read_surface(sfc_file0)
@@ -388,14 +391,14 @@ def clamps_parser(file_dir,t0,p0,height_max=3000,cape_cin=True):
         #Import the kinematic data
         ####################################################################
 
-        lid0 = sorted(glob(file_dir+'{}/lidar/vad/*{}*'.format(dt.year,t0[k].strftime('%Y%m%d'))))[0]
-        lid1 = sorted(glob(file_dir+'{}/lidar/vad/*{}*'.format(dt.year,dt.strftime('%Y%m%d'))))[0]
+        lid0 = sorted(glob(file_dir+'{}/lidar/clamps/vad/*{}*'.format(dt.year,t0[k].strftime('%Y%m%d'))))[0]
+        lid1 = sorted(glob(file_dir+'{}/lidar/clamps/vad/*{}*'.format(dt.year,t1[k].strftime('%Y%m%d'))))[0]
 
         ltime0,lheight0,wspd0,wdir0,w0 = read_lidar(lid0,dt,height_max)
         ltime1,lheigh1t,wspd1,wdir1,w1 = read_lidar(lid1,dt,height_max)
 
         if np.sum((lheight0-lheigh1t)) != 0:
-            print('ERROR: LiDAR height levels from {} to {} do not match.'.format(t0[k].strftime('%Y%m%d'),dt.strftime('%Y%m%d')))
+            print('ERROR: LiDAR height levels from {} to {} do not match.'.format(t0[k].strftime('%Y%m%d'),t1[k].strftime('%Y%m%d')))
 
         #Concatenate all together
         ltime,lheight = np.concatenate((ltime0,ltime1)),lheight0
@@ -409,9 +412,12 @@ def clamps_parser(file_dir,t0,p0,height_max=3000,cape_cin=True):
         l_utc,l_rel = ltime[tidx],rel_hours[tidx]
         l_dec = np.array([todectime(val.hour,val.minute,val.second) for val in l_utc])
         #Make the decimal time continous
-        for i,val in enumerate(l_dec):
-            if val<10:
-                l_dec[i] = val+24
+        try:
+            iadd = np.where(l_dec<1)[0][0]
+            l_dec[iadd:] = l_dec[iadd:] + 24
+        except IndexError:
+            pass
+        
         wspd,wdir,w = wspd[tidx,:],wdir[tidx,:],w[tidx,:]
 
         #Replace with surface MetTower data
@@ -427,9 +433,9 @@ def clamps_parser(file_dir,t0,p0,height_max=3000,cape_cin=True):
         ####################################################################
         #Import the vertical stares
         ####################################################################
-        stare0 = sorted(glob(file_dir+'{}/lidar/vs/*{}*'.format(dt.year,t0[k].strftime('%Y%m%d'))))[0]
+        stare0 = sorted(glob(file_dir+'{}/lidar/clamps/*{}*'.format(dt.year,t0[k].strftime('%Y%m%d'))))[0]
         try:
-            stare1 = sorted(glob(file_dir+'{}/lidar/vs/*{}*'.format(dt.year,dt.strftime('%Y%m%d'))))[0]
+            stare1 = sorted(glob(file_dir+'{}/lidar/clamps/*{}*'.format(dt.year,t1[k].strftime('%Y%m%d'))))[0]
             no_vs = False
         except IndexError:
             no_vs = True
@@ -441,7 +447,7 @@ def clamps_parser(file_dir,t0,p0,height_max=3000,cape_cin=True):
             vs_time1,vs_height1,vs_vel1,vs_cbh1 = read_stare(stare1,dt,height_max)
 
             if np.sum((vs_height0-vs_height1)) != 0:
-                print('ERROR: Vertical stare height levels from {} to {} do not match.'.format(t0[k].strftime('%Y%m%d'),dt.strftime('%Y%m%d')))
+                print('ERROR: Vertical stare height levels from {} to {} do not match.'.format(t0[k].strftime('%Y%m%d'),t1[k].strftime('%Y%m%d')))
 
             #Concatenate all together
             vs_time,vs_height = np.concatenate((vs_time0,vs_time1)),vs_height0
@@ -458,9 +464,12 @@ def clamps_parser(file_dir,t0,p0,height_max=3000,cape_cin=True):
         vs_utc,vs_rel = vs_time[tidx],rel_hours[tidx]
         vs_dec = np.array([todectime(val.hour,val.minute,val.second) for val in vs_utc])
         #Make the decimal time continous
-        for i,val in enumerate(vs_dec):
-            if val<10:
-                vs_dec[i] = val+24
+        try:
+            iadd = np.where(vs_dec<1)[0][0]
+            vs_dec[iadd:] = vs_dec[iadd:] + 24
+        except IndexError:
+            pass
+        
         vs_vel,vs_cbh = vs_vel[tidx,:],vs_cbh[tidx]
 
         
@@ -538,11 +547,11 @@ if __name__ == '__main__':
     out_dir = '/Users/admin/Desktop/'
 
     print('----------------------------- Linear Cases -----------------------------')
-    lin = clamps_parser(file_dir,lt0,lp0,height_max=3000)
+    lin = clamps_parser(file_dir,lt0,lt1,lp0,height_max=3000)
     print('\n----------------------------- Discrete Cases -----------------------------')
-    dis = clamps_parser(file_dir,dt0,dp0,height_max=3000)
+    dis = clamps_parser(file_dir,dt0,dt1,dp0,height_max=3000)
     print('\n----------------------------- Mixed Cases -----------------------------')
-    mix = clamps_parser(file_dir,mt0,mp0,height_max=3000)
+    mix = clamps_parser(file_dir,mt0,mt1,mp0,height_max=3000)
 
     #Add these to a pickle file
     f = open(out_dir+'clamps_cases_test.pckl', 'wb')
